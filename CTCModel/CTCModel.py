@@ -136,6 +136,13 @@ class CTCModel:
         """
         return self.model_eval
 
+
+    def get_model_init(self):
+        """
+        :return: Full Monty
+        """
+        return self.model_init
+
     def get_loss_on_batch(self, inputs, verbose=False):
         """
         Computation the loss
