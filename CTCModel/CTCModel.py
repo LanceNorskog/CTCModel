@@ -760,6 +760,70 @@ class CTCModel:
                       in enumerate(out)]
         return out_decode
 
+    def predict_probs(self, x, batch_size=None, verbose=0, steps=None, max_len=None, max_value=999):
+
+        """
+        The same function as in the Keras Model but with a different function predict_loop for dealing with variable length predictions
+        Except that x = [x_features, x_len]
+
+        Generates output predictions for the input samples.
+
+                Computation is done in batches.
+
+                # Arguments
+                    x: The input data, as a Numpy array
+                        (or list of Numpy arrays if the model has multiple outputs).
+                    batch_size: Integer. If unspecified, it will default to 32.
+                    verbose: Verbosity mode, 0 or 1.
+                    steps: Total number of steps (batches of samples)
+                        before declaring the prediction round finished.
+                        Ignored with the default value of `None`.
+
+                # Returns
+                    Numpy array(s) of predictions.
+
+                # Raises
+                    ValueError: In case of mismatch between the provided
+                        input data and the model's expectations,
+                        or in case a stateful model receives a number of samples
+                        that is not a multiple of the batch size.
+                """
+        [x_inputs, x_len] = x
+        if max_len is None:
+            max_len = np.max(x_len)
+
+        # Backwards compatibility.
+        if batch_size is None and steps is None:
+            batch_size = 32
+        if x is None and steps is None:
+            raise ValueError('If predicting from data tensors, '
+                             'you should specify the `steps` '
+                             'argument.')
+        # Validate user data.
+        x = _standardize_input_data(x, self.model_pred._feed_input_names,
+                                    self.model_pred._feed_input_shapes,
+                                    check_batch_axis=False)
+        if self.model_pred.stateful:
+            if x[0].shape[0] > batch_size and x[0].shape[0] % batch_size != 0:
+                raise ValueError('In a stateful network, '
+                                 'you should only pass inputs with '
+                                 'a number of samples that can be '
+                                 'divided by the batch size. Found: ' +
+                                 str(x[0].shape[0]) + ' samples. '
+                                                      'Batch size: ' + str(batch_size) + '.')
+
+        # Prepare inputs, delegate logic to `_predict_loop`.
+        if self.model_pred.uses_learning_phase and not isinstance(K.learning_phase(), int):
+            ins = x + [0.]
+        else:
+            ins = x
+        self.model_pred._make_predict_function()
+        f = self.model_pred.predict_function
+        out = self._predict_loop(f, ins, batch_size=batch_size, max_value=max_value,
+                                 verbose=verbose, steps=steps, max_len=max_len)
+        
+        return out
+
     def _predict_loop(self, f, ins, max_len=100, max_value=999, batch_size=32, verbose=0, steps=None):
         """Abstract method to loop over some data in batches.
 
